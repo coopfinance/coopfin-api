@@ -1,0 +1,128 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Group {
+  id                  String   @id @default(cuid())
+  name                String
+  description         String?
+  adminAddress        String
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // Stellar contract addresses
+  treasuryContractId  String?  @unique
+  loanContractId      String?  @unique
+  votingContractId    String?  @unique
+  governanceContractId String? @unique
+  dividendContractId  String?  @unique
+
+  // Relations
+  members       Member[]
+  contributions Contribution[]
+  loans         Loan[]
+  proposals     Proposal[]
+  distributions Distribution[]
+
+  @@map("groups")
+}
+
+model Member {
+  id             String   @id @default(cuid())
+  address        String
+  displayName    String?
+  email          String?
+  phone          String?
+  isActive       Boolean  @default(true)
+  joinedAt       DateTime @default(now())
+  groupId        String
+  group          Group    @relation(fields: [groupId], references: [id])
+
+  @@unique([address, groupId])
+  @@map("members")
+}
+
+model Contribution {
+  id          String   @id @default(cuid())
+  groupId     String
+  group       Group    @relation(fields: [groupId], references: [id])
+  memberAddress String
+  amount      BigInt
+  period      Int
+  txHash      String?  @unique
+  ledger      Int?
+  createdAt   DateTime @default(now())
+
+  @@map("contributions")
+}
+
+model Loan {
+  id           String   @id @default(cuid())
+  onChainId    Int
+  groupId      String
+  group        Group    @relation(fields: [groupId], references: [id])
+  borrower     String
+  amount       BigInt
+  interestBps  Int
+  purpose      String
+  status       String   @default("Pending")
+  requestedAt  DateTime @default(now())
+  approvedAt   DateTime?
+  repaidAt     DateTime?
+  dueAt        DateTime?
+  txHash       String?
+
+  @@map("loans")
+}
+
+model Proposal {
+  id           String   @id @default(cuid())
+  onChainId    Int
+  groupId      String
+  group        Group    @relation(fields: [groupId], references: [id])
+  proposer     String
+  type         String
+  title        String
+  description  String
+  votesFor     Int      @default(0)
+  votesAgainst Int      @default(0)
+  quorum       Int
+  deadline     DateTime
+  status       String   @default("Active")
+  payload      String?
+  createdAt    DateTime @default(now())
+
+  @@map("proposals")
+}
+
+model Distribution {
+  id          String   @id @default(cuid())
+  onChainId   Int
+  groupId     String
+  group       Group    @relation(fields: [groupId], references: [id])
+  totalProfit BigInt
+  period      String
+  executedAt  DateTime @default(now())
+  txHash      String?
+
+  @@map("distributions")
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  recipient   String
+  type        String
+  title       String
+  body        String
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  metadata    Json?
+
+  @@map("notifications")
+}

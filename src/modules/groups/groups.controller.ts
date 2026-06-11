@@ -1,0 +1,27 @@
+import { Controller, Get, Post, Param, Body } from "@nestjs/common";
+import { ApiTags, ApiOperation } from "@nestjs/swagger";
+import { GroupsService, CreateGroupDto } from "./groups.service";
+
+@ApiTags("groups")
+@Controller("groups")
+export class GroupsController {
+  constructor(private readonly groupsService: GroupsService) {}
+
+  @Get()
+  @ApiOperation({ summary: "List all groups" })
+  findAll() {
+    return this.groupsService.findAll();
+  }
+
+  @Get(":id")
+  @ApiOperation({ summary: "Get a single group" })
+  findOne(@Param("id") id: string) {
+    return this.groupsService.findOne(id);
+  }
+
+  @Post()
+  @ApiOperation({ summary: "Register a new group after contract deployment" })
+  create(@Body() dto: CreateGroupDto) {
+    return this.groupsService.create(dto);
+  }
+}
