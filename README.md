@@ -64,4 +64,4 @@ src/
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). This repo participates in the [Stellar Drips Wave](https://drips.network/wave/stellar).
+See [CONTRIBUTING.md](CONTRIBUTING.md).
