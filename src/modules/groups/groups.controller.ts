@@ -1,6 +1,7 @@
-import { Controller, Get, Post, Param, Body } from "@nestjs/common";
-import { ApiTags, ApiOperation } from "@nestjs/swagger";
+import { Controller, Get, Post, Param, Body, UseGuards } from "@nestjs/common";
+import { ApiTags, ApiOperation, ApiBearerAuth } from "@nestjs/swagger";
 import { GroupsService, CreateGroupDto } from "./groups.service";
+import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 
 @ApiTags("groups")
 @Controller("groups")
@@ -20,6 +21,8 @@ export class GroupsController {
   }
 
   @Post()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: "Register a new group after contract deployment" })
   create(@Body() dto: CreateGroupDto) {
     return this.groupsService.create(dto);
