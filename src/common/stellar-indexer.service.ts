@@ -1,77 +1,178 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { Cron, CronExpression } from "@nestjs/schedule";
-import { ConfigService } from "@nestjs/config";
-import { PrismaService } from "./prisma.service";
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../prisma/prisma.service';
+import { xdr, scValToNative, Address } from '@stellar/stellar-sdk';
+import axios from 'axios';
 
-/**
- * Polls Stellar Horizon for contract events and syncs them to the database.
- * This bridges on-chain state with the off-chain PostgreSQL store.
- */
 @Injectable()
 export class StellarIndexerService {
   private readonly logger = new Logger(StellarIndexerService.name);
-  private readonly horizonUrl: string;
+  private lastSyncedLedger: Map<string, number> = new Map();
 
   constructor(
     private prisma: PrismaService,
-    private config: ConfigService,
-  ) {
-    this.horizonUrl = config.get("HORIZON_URL", "https://horizon-testnet.stellar.org");
-  }
+    private configService: ConfigService,
+  ) {}
 
-  /** Poll for contribution events every 30 seconds */
-  @Cron(CronExpression.EVERY_30_SECONDS)
-  async syncContributions() {
-    this.logger.debug("Syncing contributions from Stellar...");
+  async fetchAndStoreEvents(contractId: string, eventType: string) {
     try {
-      const groups = await this.prisma.group.findMany({
-        where: { treasuryContractId: { not: null } },
-        select: { id: true, treasuryContractId: true },
-      });
+      const horizonUrl = this.configService.get('HORIZON_URL');
+      const lastLedger = this.lastSyncedLedger.get(contractId) || 0;
 
-      for (const group of groups) {
-        if (!group.treasuryContractId) continue;
-        await this.fetchAndStoreEvents(group.id, group.treasuryContractId, "contribution");
+      // 1. Obtener eventos de Horizon
+      const response = await axios.get(
+        `${horizonUrl}/contracts/${contractId}/events`,
+        {
+          params: {
+            'filter[type]': eventType,
+            'order': 'asc',
+            'cursor': `now-${lastLedger}`,
+          },
+        },
+      );
+
+      const records = response.data._embedded.records;
+      if (!records || records.length === 0) {
+        this.logger.debug(`No new ${eventType} events for contract ${contractId}`);
+        return;
       }
-    } catch (err) {
-      this.logger.error("Contribution sync failed", err);
+
+      this.logger.debug(`Found ${records.length} ${eventType} events for contract ${contractId}`);
+
+      // 2. Procesar eventos
+      for (const record of records) {
+        try {
+          await this.processEvent(contractId, record);
+        } catch (error) {
+          this.logger.error(`Failed to process event: ${error.message}`, error.stack);
+        }
+      }
+
+      // 3. Actualizar último ledger sincronizado
+      const lastLedgerInBatch = records[records.length - 1].ledger;
+      this.lastSyncedLedger.set(contractId, lastLedgerInBatch);
+
+    } catch (error) {
+      this.logger.error(`Error fetching events: ${error.message}`, error.stack);
+      throw error;
     }
   }
 
-  /** Poll for loan events every minute */
-  @Cron(CronExpression.EVERY_MINUTE)
-  async syncLoanEvents() {
-    this.logger.debug("Syncing loan events from Stellar...");
+  private async processEvent(contractId: string, record: any) {
+    // Decodificar payload XDR
+    let decodedPayload: any;
     try {
-      const groups = await this.prisma.group.findMany({
-        where: { loanContractId: { not: null } },
-        select: { id: true, loanContractId: true },
-      });
+      const xdrData = record.value.xdr;
+      const scVal = xdr.ScVal.fromXDR(xdrData, 'base64');
+      decodedPayload = scValToNative(scVal);
+    } catch (error) {
+      this.logger.error(`Failed to decode XDR: ${error.message}`);
+      return;
+    }
 
-      for (const group of groups) {
-        if (!group.loanContractId) continue;
-        await this.fetchAndStoreEvents(group.id, group.loanContractId, "loan");
-      }
-    } catch (err) {
-      this.logger.error("Loan sync failed", err);
+    this.logger.debug(`Decoded payload: ${JSON.stringify(decodedPayload)}`);
+
+    // Determinar tipo de evento por topics
+    const eventType = record.topic || 'unknown';
+
+    switch (eventType) {
+      case 'contribution':
+        await this.handleContributionEvent(contractId, record, decodedPayload);
+        break;
+      case 'loan_requested':
+        await this.handleLoanRequestedEvent(contractId, record, decodedPayload);
+        break;
+      case 'loan_approved':
+        await this.handleLoanApprovedEvent(contractId, record, decodedPayload);
+        break;
+      default:
+        this.logger.warn(`Unknown event type: ${eventType}`);
     }
   }
 
-  private async fetchAndStoreEvents(
-    groupId: string,
+  private async handleContributionEvent(
     contractId: string,
-    eventType: string,
+    record: any,
+    payload: any,
   ) {
-    const url = `${this.horizonUrl}/contracts/${contractId}/events?limit=50&order=desc`;
-    const res = await fetch(url);
-    if (!res.ok) return;
+    try {
+      // Asumiendo payload: [memberAddress, amount, period]
+      const [memberAddress, amount, period] = payload;
 
-    const { _embedded: { records } } = await res.json() as {
-      _embedded: { records: Array<{ id: string; type: string; in_successful_contract_call: boolean }> }
-    };
+      await this.prisma.contribution.upsert({
+        where: {
+          txHash: record.transaction_hash,
+        },
+        create: {
+          groupId: contractId,
+          memberAddress: memberAddress.toString(),
+          amount: amount.toString(),
+          period: period,
+          txHash: record.transaction_hash,
+          ledger: record.ledger,
+        },
+        update: {},
+      });
 
-    this.logger.debug(`Found ${records.length} ${eventType} events for contract ${contractId}`);
-    // TODO: Parse and upsert into contributions / loans tables
-    // This is where you'd decode the XDR event payloads from Soroban
+      this.logger.debug(`Contribution event processed for ${memberAddress}`);
+    } catch (error) {
+      this.logger.error(`Error handling contribution: ${error.message}`);
+    }
+  }
+
+  private async handleLoanRequestedEvent(
+    contractId: string,
+    record: any,
+    payload: any,
+  ) {
+    try {
+      // Asumiendo payload: [loanId, borrowerAddress, amount]
+      const [loanId, borrowerAddress, amount] = payload;
+
+      await this.prisma.loan.upsert({
+        where: {
+          id: loanId,
+        },
+        create: {
+          id: loanId,
+          groupId: contractId,
+          borrowerAddress: borrowerAddress.toString(),
+          amount: amount.toString(),
+          status: 'Pending',
+          requestedAt: new Date(record.ledger_close_time),
+        },
+        update: {},
+      });
+
+      this.logger.debug(`Loan requested event processed for ${loanId}`);
+    } catch (error) {
+      this.logger.error(`Error handling loan_requested: ${error.message}`);
+    }
+  }
+
+  private async handleLoanApprovedEvent(
+    contractId: string,
+    record: any,
+    payload: any,
+  ) {
+    try {
+      // Asumiendo payload: [loanId, borrowerAddress, amount]
+      const [loanId, borrowerAddress, amount] = payload;
+
+      await this.prisma.loan.update({
+        where: {
+          id: loanId,
+        },
+        data: {
+          status: 'Approved',
+          approvedAt: new Date(record.ledger_close_time),
+          amount: amount.toString(),
+        },
+      });
+
+      this.logger.debug(`Loan approved event processed for ${loanId}`);
+    } catch (error) {
+      this.logger.error(`Error handling loan_approved: ${error.message}`);
+    }
   }
 }
