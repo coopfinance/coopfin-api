@@ -9,7 +9,7 @@
     "start:debug": "nest start --debug --watch",
     "lint":        "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "test":        "jest",
-    "test:e2e":    "jest --config ./test/jest-e2e.json",
+  "test:e2e": "jest --config ./test/jest-e2e.config.js",
     "db:migrate":  "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:studio":   "prisma studio"
@@ -49,6 +49,8 @@
     "prisma":             "^5.15.0",
     "ts-jest":            "^29.1.5",
     "ts-node":            "^10.9.2",
-    "typescript":         "^5.4.5"
+    "typescript":         "^5.4.5",
+    "supertest": "^7.0.0",
+    "@types/supertest": "^6.0.2"
   }
 }
