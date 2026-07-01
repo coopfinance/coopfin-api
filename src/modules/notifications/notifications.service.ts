@@ -23,7 +23,7 @@ export class NotificationsService {
     metadata?: Record<string, unknown>
   ) {
     return this.prisma.notification.create({
-      data: { recipient, type, title, body, metadata },
+      data: { recipient, type, title, body, metadata: metadata as any },
     });
   }
 
