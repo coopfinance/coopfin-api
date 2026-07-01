@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../../common/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { paginate } from "../../common/dto/pagination-query.dto";
+import { FindLoansQueryDto } from "./dto/find-loans-query.dto";
 
 export interface CreateLoanDto {
   groupId: string;
@@ -18,14 +20,24 @@ export class LoansService {
     private notifications: NotificationsService,
   ) {}
 
-  async findAll(groupId?: string, status?: string) {
-    return this.prisma.loan.findMany({
-      where: {
-        ...(groupId ? { groupId } : {}),
-        ...(status  ? { status  } : {}),
-      },
-      orderBy: { requestedAt: "desc" },
-    });
+  async findAll(query: FindLoansQueryDto) {
+    const { page, limit, groupId, status, sortBy, order } = query;
+    const where = {
+      ...(groupId ? { groupId } : {}),
+      ...(status  ? { status  } : {}),
+    };
+
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.loan.findMany({
+        where,
+        orderBy: { [sortBy]: order },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.loan.count({ where }),
+    ]);
+
+    return paginate(data, total, page, limit);
   }
 
   async findOne(id: string) {

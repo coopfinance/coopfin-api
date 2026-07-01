@@ -1,6 +1,10 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../../common/prisma.service";
 import { StellarService } from "../../common/stellar.service";
+import {
+  paginate,
+  PaginationQueryDto,
+} from "../../common/dto/pagination-query.dto";
 
 export interface CreateGroupDto {
   name: string;
@@ -20,14 +24,21 @@ export class GroupsService {
     private stellar: StellarService,
   ) {}
 
-  async findAll() {
-    const groups = await this.prisma.group.findMany({
-      include: { members: true },
-      orderBy: { createdAt: "desc" },
-    });
+  async findAll(query: PaginationQueryDto) {
+    const { page, limit } = query;
+
+    const [groups, total] = await this.prisma.$transaction([
+      this.prisma.group.findMany({
+        include: { members: true },
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.group.count(),
+    ]);
 
     // Enrich with on-chain balances
-    return Promise.all(
+    const data = await Promise.all(
       groups.map(async (g) => {
         const balance = g.treasuryContractId
           ? await this.stellar.getBalance(g.adminAddress, undefined)
@@ -35,6 +46,8 @@ export class GroupsService {
         return { ...g, balance };
       })
     );
+
+    return paginate(data, total, page, limit);
   }
 
   async findOne(id: string) {
