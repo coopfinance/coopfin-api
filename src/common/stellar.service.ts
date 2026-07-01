@@ -59,9 +59,9 @@ export class StellarService {
   async getBalance(address: string, assetContractId?: string): Promise<string> {
     try {
       if (!assetContractId) {
-        const account = await this.server.getAccount(address);
+        const account = await this.server.getAccount(address) as any;
         return account.balances
-          .find((b) => b.asset_type === "native")
+          .find((b: any) => b.asset_type === "native")
           ?.balance ?? "0";
       }
       // USDC or other token contract balance
