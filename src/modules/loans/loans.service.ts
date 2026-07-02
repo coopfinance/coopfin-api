@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../../common/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 
@@ -34,7 +34,18 @@ export class LoansService {
     return loan;
   }
 
-  async create(dto: CreateLoanDto) {
+  async create(dto: CreateLoanDto, actorAddress: string) {
+    if (dto.borrower !== actorAddress) {
+      throw new ForbiddenException("Authenticated Stellar address must match borrower");
+    }
+
+    const membership = await this.prisma.member.findUnique({
+      where: { address_groupId: { address: actorAddress, groupId: dto.groupId } },
+    });
+    if (!membership?.isActive) {
+      throw new ForbiddenException("Only active group members can request loans");
+    }
+
     const loan = await this.prisma.loan.create({
       data: {
         groupId: dto.groupId,
@@ -59,7 +70,16 @@ export class LoansService {
     return loan;
   }
 
-  async updateStatus(id: string, status: string) {
+  async updateStatus(id: string, status: string, actorAddress: string) {
+    const loan = await this.prisma.loan.findUnique({
+      where: { id },
+      include: { group: true },
+    });
+    if (!loan) throw new NotFoundException("Loan not found");
+    if (loan.group.adminAddress !== actorAddress) {
+      throw new ForbiddenException("Only the group admin can update loan status");
+    }
+
     return this.prisma.loan.update({ where: { id }, data: { status } });
   }
 }

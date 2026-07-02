@@ -12,6 +12,15 @@ import {
   xdr,
 } from "@stellar/stellar-sdk";
 
+interface HorizonBalance {
+  asset_type: string;
+  balance: string;
+}
+
+interface HorizonAccount {
+  balances?: HorizonBalance[];
+}
+
 @Injectable()
 export class StellarService {
   private readonly logger = new Logger(StellarService.name);
@@ -60,7 +69,7 @@ export class StellarService {
     try {
       if (!assetContractId) {
         const account = await this.server.getAccount(address);
-        return account.balances
+        return (((account as unknown) as HorizonAccount).balances ?? [])
           .find((b) => b.asset_type === "native")
           ?.balance ?? "0";
       }

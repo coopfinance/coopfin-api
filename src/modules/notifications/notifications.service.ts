@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../common/prisma.service";
 
 export type NotificationType =
@@ -23,7 +24,7 @@ export class NotificationsService {
     metadata?: Record<string, unknown>
   ) {
     return this.prisma.notification.create({
-      data: { recipient, type, title, body, metadata },
+      data: { recipient, type, title, body, metadata: metadata as Prisma.InputJsonValue },
     });
   }
 
