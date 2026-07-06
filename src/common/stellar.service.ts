@@ -12,6 +12,11 @@ import {
   xdr,
 } from "@stellar/stellar-sdk";
 
+interface HorizonBalance {
+  asset_type: string;
+  balance: string;
+}
+
 @Injectable()
 export class StellarService {
   private readonly logger = new Logger(StellarService.name);
@@ -59,10 +64,8 @@ export class StellarService {
   async getBalance(address: string, assetContractId?: string): Promise<string> {
     try {
       if (!assetContractId) {
-        const account = await this.server.getAccount(address);
-        return account.balances
-          .find((b) => b.asset_type === "native")
-          ?.balance ?? "0";
+        const account = await this.server.getAccount(address) as unknown as { balances?: HorizonBalance[] };
+        return account.balances?.find((b) => b.asset_type === "native")?.balance ?? "0";
       }
       // USDC or other token contract balance
       const result = await this.readContract(
