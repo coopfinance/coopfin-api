@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Patch, Param, Body, Query } from "@nestjs/common";
-import { ApiTags, ApiOperation, ApiQuery } from "@nestjs/swagger";
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
+import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { LoansService, CreateLoanDto } from "./loans.service";
 
 @ApiTags("loans")
@@ -22,12 +23,16 @@ export class LoansController {
 
   @Post()
   @ApiOperation({ summary: "Register a loan request after on-chain submission" })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   create(@Body() dto: CreateLoanDto) {
     return this.loansService.create(dto);
   }
 
   @Patch(":id/status")
   @ApiOperation({ summary: "Update loan status (after on-chain approval/repayment)" })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   updateStatus(@Param("id") id: string, @Body("status") status: string) {
     return this.loansService.updateStatus(id, status);
   }
