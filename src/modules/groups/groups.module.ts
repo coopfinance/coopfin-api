@@ -3,8 +3,10 @@ import { GroupsController } from "./groups.controller";
 import { GroupsService } from "./groups.service";
 import { PrismaService } from "../../common/prisma.service";
 import { StellarService } from "../../common/stellar.service";
+import { AuthModule } from "../auth/auth.module";
 
 @Module({
+  imports: [AuthModule],
   controllers: [GroupsController],
   providers: [GroupsService, PrismaService, StellarService],
   exports: [GroupsService],
