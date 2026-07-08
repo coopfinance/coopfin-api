@@ -6,6 +6,7 @@ import { MembersModule } from "./modules/members/members.module";
 import { LoansModule } from "./modules/loans/loans.module";
 import { GovernanceModule } from "./modules/governance/governance.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
+import { AuthModule } from "./modules/auth/auth.module";
 import { PrismaService } from "./common/prisma.service";
 import { StellarService } from "./common/stellar.service";
 import { StellarIndexerService } from "./common/stellar-indexer.service";
@@ -14,6 +15,7 @@ import { StellarIndexerService } from "./common/stellar-indexer.service";
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
+    AuthModule,
     GroupsModule,
     MembersModule,
     LoansModule,
